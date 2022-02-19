@@ -4,13 +4,7 @@ import re
 import jieba
 import jieba.posseg as pseg
 import heapq
-
-from Levenshtein import *
-import pickle
-import re
-import jieba
-import jieba.posseg as pseg
-import heapq
+import pandas as pd
 
 
 class StringMatcher:
@@ -88,7 +82,7 @@ def join_char(words_array):
                 score.append("".join(temp))
                 temp = []
             score.append(word)
-        else:
+        else:# 单字
             temp.append(word)
     return score
 
@@ -117,8 +111,8 @@ def normalize(name, branch_words, re_chars):
 def get_main_sub(string_array, weight_sort_amount):
     if string_array and len(string_array) >= weight_sort_amount:
         weights = [weight.get(x, 0) for x in string_array]
-        index = list(map(weights.index, heapq.nsmallest(weight_sort_amount, weights)))[0]
-        return string_array[index], "".join([x for i, x in enumerate(string_array) if i != index])
+        index = list(map(weights.index, heapq.nsmallest(weight_sort_amount, weights)))
+        return "".join([x for i, x in enumerate(string_array) if i in index]), "".join([x for i, x in enumerate(string_array) if i not in index])
     elif string_array:
         weights = [weight.get(x, 0) for x in string_array]
         index = weights.index(min(weights))
@@ -183,14 +177,26 @@ def match_subject(df_slice):
 
 
 if __name__ == "__main__":
-    index = 0
+    # index = 0
     weight = pickle.load(open('weight.pkl', 'rb'))
-    df = pickle.load(open('invoice_purchase.plk', 'rb'))
-    df = df[~df['k_xfdwmc'].isnull()]
-    df = df[df['k_xfdwmc'] != ""]
-    df['siamese'] = df.apply(lambda x: StringMatcher(x.k_xfdwmc, x.k_kmqc_x).partial_ratio(), axis=1)
-    df = df[df['siamese'] > 0.5][["k_xfdwmc", "k_kmqc_x", "k_kmqc_y"]]
-    df['match'] = df.apply(match_subject, axis=1)
-    df['match_subject'] = df['match'].apply(lambda x: {max(x, key=x.get): x[max(x, key=x.get)]})
-    df['bool_match'] = df.apply(lambda x: 1 if x.k_kmqc_x == list(x.match_subject.keys())[0] else 0, axis=1)
-    df.to_pickle("score.pkl")
+    # print(weight['南京'])
+    # df = pickle.load(open('invoice_purchase.plk', 'rb'))
+    # df = df[~df['k_xfdwmc'].isnull()]
+    # df = df[df['k_xfdwmc'] != ""]
+    # df['siamese'] = df.apply(lambda x: StringMatcher(x.k_xfdwmc, x.k_kmqc_x).partial_ratio(), axis=1)
+    # df = df[df['siamese'] > 0.5][["k_xfdwmc", "k_kmqc_x", "k_kmqc_y"]]
+    # df['match'] = df.apply(match_subject, axis=1)
+    # df['match_subject'] = df['match'].apply(lambda x: {max(x, key=x.get): x[max(x, key=x.get)]})
+    # df['bool_match'] = df.apply(lambda x: 1 if x.k_kmqc_x == list(x.match_subject.keys())[0] else 0, axis=1)
+    # df.to_pickle("score.pkl")
+
+    # df = pd.read_csv('weight.csv', header=None)
+    # weight = {}
+    # for index, row in df.iterrows():
+    #     weight[row[0]] = row[1]
+    # print(weight['南京'])
+    # pickle.dump(weight, open('weight.pkl', 'wb'))
+    score = match('北京百度公司', ['百度有限公司', '北京千百度公司'])# 匹配度打分： 0.7 0.1
+    print(score)
+    print(join_char(['千', '千',  '百度']))
+    print(get_main_sub(['中华', '人民', '共和国'], 1))
