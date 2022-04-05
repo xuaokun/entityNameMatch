@@ -1,11 +1,14 @@
 from Levenshtein import *
 import pickle
 import re
-import jieba
 import jieba.posseg as pseg
 import heapq
-import pandas as pd
+import flask
+import json
+from flask import request
 
+server = flask.Flask(__name__)
+weight = pickle.load(open('weight.pkl', 'rb'))
 
 class StringMatcher:
     def _reset_cache(self):
@@ -57,6 +60,7 @@ class StringMatcher:
 
     def partial_ratio(self, use_length=False, mismatch_length_point=0.2):
         blocks = self.get_matching_blocks()
+        print(self._str1, self._str2, blocks)
         scores = []
         len1, len2 = len(self._str1), len(self._str2)
         # len_ratio = 2 * min(len1, len2) / (len1 + len2) if len1 and len2 else 0
@@ -138,7 +142,9 @@ def match_area(area, compare_area, null_area, error_area):
 
 def match_info(words_array, compare_array, mismatch_main, miss_field, weight_sort_amount):
     main, other = get_main_sub(words_array, weight_sort_amount)
+    print('主体信息:', main, '附加信息:', other)
     main_, other_ = get_main_sub(compare_array, weight_sort_amount)
+    print('比较主体信息:', main_, '比较附加信息:', other_)
     ratio = 1 if main == main_ else mismatch_main
     if not other or not other_:
         return ratio - miss_field
@@ -148,19 +154,49 @@ def match_info(words_array, compare_array, mismatch_main, miss_field, weight_sor
         return ratio - (1 - StringMatcher(other_, other).partial_ratio(True))
 
 
+@server.route('/entity_match', methods=['GET'])
+def entity_match():
+    try:
+        args = request.args
+        if 'name' not in args or 'compareArr' not in args:
+            return json.dumps({
+                'status': 0,
+                'data': [],
+                'message': "please send params includes name, compareArr,"
+                           " and compareArr should be names seperated by ','."
+            })
+        score = match(args['name'], args['compareArr'].split(','))
+        print(score)
+        return json.dumps({
+            'status': 0,
+            'data': score,
+        })
+    except Exception as e:
+        print(e)
+        return json.dumps({
+            'status': -1,
+            'data': str(e)
+        })
+
+
 def match(name, compare_array, branch_words=('分公司', '分支公司', '支公司', '分店', '分会', '分院', '分部', '分校'),
-          re_chars='~`!#$%^&*()_+-/|\';":/.,?><br~·！@#￥%……&*（）——:-=“：’；、。，？\n 》《{}', weight_sort_amount=2,
+          re_chars='~`!#$%^&*()_+-/|\';":/.,?><br~·！@#￥%……&*（）——:-=“：’；、。，？\n 》《{}', weight_sort_amount=1,
           mismatch_main=0.3, miss_field=0.1, error_area=0.5, error_branch=0.7):
     score = {}
     name_, area, branch = normalize(name, branch_words, re_chars)
+    print('实体信息提取', name_, area, branch)
     for i, compare in enumerate(compare_array):
         if name == compare:
             score[i] = 1
         else:
             compare_name, compare_area, compare_branch = normalize(compare, branch_words, re_chars)
+            print('比较实体信息提取', compare_name, compare_area, compare_branch)
             ratio = match_info(name_, compare_name, mismatch_main, miss_field, weight_sort_amount)
+            print('主体部分匹配度：', ratio)
             ratio_area = match_area(area, compare_area, miss_field, error_area)
+            print('地区部分匹配扣除分值：', ratio_area)
             ratio_branch = match_branch(branch, compare_branch, error_branch)
+            print('分支部分匹配扣除分值：', ratio_branch)
             score[i] = max(0, ratio - ratio_area - ratio_branch)
     return score
 
@@ -196,7 +232,15 @@ if __name__ == "__main__":
     #     weight[row[0]] = row[1]
     # print(weight['南京'])
     # pickle.dump(weight, open('weight.pkl', 'wb'))
-    score = match('北京百度公司', ['百度有限公司', '北京千百度公司'])# 匹配度打分： 0.7 0.1
-    print(score)
-    print(join_char(['千', '千',  '百度']))
-    print(get_main_sub(['中华', '人民', '共和国'], 1))
+    # score = match('北京百度公司', ['百度有限公司', '北京千百度公司'])# 匹配度打分： 0.7 0.1
+    # print(score)
+    # print(join_char(['千', '千',  '百度']))
+    # print(get_main_sub(['中华', '人民', '共和国'], 1))
+    # a, b = 'spam', 'park'
+    # mb = matching_blocks(editops(a, b), a, b)
+    # print(''.join([a[x[0]:x[0] + x[2]] for x in mb]))
+    # print(StringMatcher('公司', '有限责任公司').partial_ratio())
+    server.run(host='0.0.0.0',
+               port=1129,
+               debug=True
+               )
